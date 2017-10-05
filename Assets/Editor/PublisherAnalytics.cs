@@ -32,14 +32,21 @@ namespace SpaceMadness
 {
     public static class PublisherAnalytics
     {
+        public static readonly string kDisableApplicationTracking = "DisableApplicationTracking";
+
+        /// <summary>
+        /// Basic raw GET request URL for Google Analytics
+        /// </summary>
         private static readonly string kTrackingURL = "https://www.google-analytics.com/collect";
 
         private const int kUndefinedValue = int.MinValue;
 
-        private static string trackingId;
+        /// <summary>
+        /// Basic app specific payload for the GET request
+        /// </summary>
         private static string defaultPayload;
 
-        public static void Initialize(string trackingId, string packageVersion)
+        public static void Initialize(string trackingId, string packageVersion, IDictionary<string, bool> configuration = null)
         {
             if (string.IsNullOrEmpty(trackingId))
             {
@@ -52,7 +59,7 @@ namespace SpaceMadness
             }
 
             // Create shared package specific payload
-            defaultPayload = CreateDefaultPayload(trackingId, packageVersion);
+            defaultPayload = CreateDefaultPayload(trackingId, packageVersion, configuration ?? new Dictionary<string, bool>());
 
             // Track package version update (if any)
             TrackPackageVersionUpdate(trackingId, packageVersion);
@@ -74,6 +81,12 @@ namespace SpaceMadness
 
         public static void TrackEvent(string category, string action, int value = kUndefinedValue)
         {
+            if (defaultPayload == null)
+            {
+                Debug.LogWarningFormat("Can't track event '{0}': instance is not initialized", action);
+                return;
+            }
+
             var payloadStr = CreatePayload(category, action, value);
             if (payloadStr != null)
             {
@@ -81,16 +94,16 @@ namespace SpaceMadness
 
                 PublisherHttpClient downloader = new PublisherHttpClient(kTrackingURL);
                 downloader.UploadData(payloadStr, delegate(string result, Exception error)
+                {
+                    if (error != null)
                     {
-                        if (error != null)
-                        {
-                            Log.e("Event track failed: " + error);
-                        }
-                        else
-                        {
-                            Log.d("Event track result: " + result);
-                        }
-                    });
+                        Log.e("Event track failed: " + error);
+                    }
+                    else
+                    {
+                        Log.d("Event track result: " + result);
+                    }
+                });
             }
         }
 
@@ -107,7 +120,7 @@ namespace SpaceMadness
             return payload.ToString();
         }
 
-        private static string CreateDefaultPayload(string trackingId, string packageVersion)
+        private static string CreateDefaultPayload(string trackingId, string packageVersion, IDictionary<string, bool> configuration)
         {
             var payload = new StringBuilder("v=1&t=event");
             payload.AppendFormat("&tid={0}", trackingId);
@@ -120,34 +133,40 @@ namespace SpaceMadness
             payload.AppendFormat("&ds={0}", "player");
             #endif
 
-            if (!string.IsNullOrEmpty(Application.productName))
-            {
-                var productName = WWW.EscapeURL(Application.productName);
-                if (productName.Length <= 100)
-                {
-                    payload.AppendFormat("&an={0}", productName);
-                }
-            }
+            bool disableAppTracking;
+            configuration.TryGetValue(kDisableApplicationTracking, out disableAppTracking);
 
-            #if UNITY_5_6_OR_NEWER
-            var identifier = Application.identifier;
-            #else
-            var identifier = Application.bundleIdentifier;
-            #endif
-            if (!string.IsNullOrEmpty(identifier))
+            if (!disableAppTracking)
             {
-                var bundleIdentifier = WWW.EscapeURL(identifier);
-                if (bundleIdentifier.Length <= 150)
+                if (!string.IsNullOrEmpty(Application.productName))
                 {
-                    payload.AppendFormat("&aid={0}", bundleIdentifier);
+                    var productName = WWW.EscapeURL(Application.productName);
+                    if (productName.Length <= 100)
+                    {
+                        payload.AppendFormat("&an={0}", productName);
+                    }
                 }
-            }
-            if (!string.IsNullOrEmpty(Application.companyName))
-            {
-                var companyName = WWW.EscapeURL(Application.companyName);
-                if (companyName.Length <= 150)
+
+                #if UNITY_5_6_OR_NEWER
+                var identifier = Application.identifier;
+                #else
+                var identifier = Application.bundleIdentifier;
+                #endif
+                if (!string.IsNullOrEmpty(identifier))
                 {
-                    payload.AppendFormat("&aiid={0}", companyName);
+                    var bundleIdentifier = WWW.EscapeURL(identifier);
+                    if (bundleIdentifier.Length <= 150)
+                    {
+                        payload.AppendFormat("&aid={0}", bundleIdentifier);
+                    }
+                }
+                if (!string.IsNullOrEmpty(Application.companyName))
+                {
+                    var companyName = WWW.EscapeURL(Application.companyName);
+                    if (companyName.Length <= 150)
+                    {
+                        payload.AppendFormat("&aiid={0}", companyName);
+                    }
                 }
             }
 
