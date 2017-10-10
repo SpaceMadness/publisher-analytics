@@ -19,7 +19,7 @@
 //  limitations under the License.
 //
 
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Net;
@@ -27,6 +27,11 @@ using System.Text;
 
 using UnityEngine;
 using UnityEditor;
+
+#if UNITY_EDITOR_WIN
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
+#endif
 
 namespace SpaceMadness
 {
